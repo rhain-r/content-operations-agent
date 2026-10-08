@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Video not found · Video Checker{% endblock %}
+
+{% block content %}
+<section class="card not-found" aria-labelledby="not-found-heading">
+  {{ ui.icon_unknown("icon not-found-icon") }}
+  <h1 id="not-found-heading">We couldn't find that video</h1>
+  <p>The link may be wrong, or the video may have been cleared to make room for newer ones. Only the most recent videos are kept, and the list starts fresh each time the app restarts.</p>
+  <p><a class="button button-primary" href="{{ links.home() }}">See all checked videos</a></p>
+</section>
+{% endblock %}

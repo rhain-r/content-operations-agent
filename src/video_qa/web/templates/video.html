@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+{% set job = page.job %}
+
+{% block title %}{{ job.video_name }} · Video Checker{% endblock %}
+
+{% block content %}
+<div class="video-page" data-video-page data-state="{{ page.state }}"{% if not static_mode %} data-status-url="/v1/qa-jobs/{{ job.job_id }}"{% endif %} data-created="{{ job.created_at.isoformat() }}">
+  <p class="back-link"><a href="{{ page.links.home() }}">← All checked videos</a></p>
+
+  <header class="video-header">
+    <h1>{{ job.video_name }}{% if job.is_example %} <span class="tag tag-large">Example</span>{% endif %}</h1>
+    <p class="video-meta">{{ page.meta | join(" · ") }}</p>
+  </header>
+
+  {% if page.state == "checking" %}
+  {# ---------------------------------------------------------------- progress #}
+  <section class="card checking-card" aria-labelledby="checking-heading">
+    <h2 id="checking-heading">Checking this video</h2>
+    <p class="elapsed">Time so far: <span data-elapsed>0:00</span></p>
+    <ol class="stepper" data-stepper>
+      {% for step in page.steps %}
+      <li class="step step-{{ step.state }}" data-stage="{{ step.stage.value }}" {% if step.state == "current" %}aria-current="step"{% endif %}>
+        <span class="step-icon step-icon-done">{{ ui.icon_pass() }}</span>
+        <span class="step-icon step-icon-current">{{ ui.icon_spinner() }}</span>
+        <span class="step-icon step-icon-upcoming">{{ ui.icon_circle() }}</span>
+        <span class="step-label">{{ step.label }}</span>
+        <span class="step-state visually-hidden" data-step-state>{% if step.state == "done" %}finished{% elif step.state == "current" %}in progress{% else %}not started{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="hint" data-queued {% if job.status.value != "queued" %}hidden{% endif %}>Another video is being checked first. This one starts as soon as that's done.</p>
+    <p class="hint">This usually takes under a minute. You can leave this page: the result will also be listed under Checked videos on the home page.</p>
+  </section>
+
+  {% else %}
+  {# ---------------------------------------------------------------- verdict #}
+  <section class="verdict verdict-{{ page.state }}" aria-labelledby="verdict-heading">
+    {{ ui.state_icon(page.state, "icon verdict-icon") }}
+    <div class="verdict-text">
+      {% if page.state == "error" %}
+      <h2 id="verdict-heading">We couldn't check this video</h2>
+      <p class="verdict-reason">{{ job.error_message or "Something went wrong on our side while checking this video." }}</p>
+      <p>This isn't a verdict on the video: the checker couldn't finish, so nothing was marked right or wrong.</p>
+      <p><a class="button button-secondary" href="{{ page.links.home() }}">Check another video</a></p>
+      {% elif page.state == "passed" %}
+      <h2 id="verdict-heading">{{ page.verdict.headline }}</h2>
+      <p>Nothing needs fixing. Each check is listed below.</p>
+      {% else %}
+      <h2 id="verdict-heading">{{ page.verdict.headline }}</h2>
+      <p>{{ page.verdict.issue_count }} {{ "thing" if page.verdict.issue_count == 1 else "things" }} to fix, each listed below with where it happens in the video.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if page.state != "error" %}
+    {% if job.is_example %}
+    <p class="small-note">{{ ui.icon_info() }} This is a hand-written example to show what a report looks like. The video is a test pattern, and every result below was written by hand, not by the AI.</p>
+    {% else %}
+    <p class="small-note">{{ ui.icon_ai() }} This review was done by an AI. A person should confirm it before acting on it.</p>
+    {% endif %}
+    {% if job.transcript_simulated and not job.is_example %}
+    <div class="notice notice-info" role="note">
+      {{ ui.icon_info("icon notice-icon") }}
+      <div>
+        <p class="notice-title">Speech is simulated in this demo</p>
+        <p>The spoken words and their timings are placeholders, not this video's real audio. So the opening line, footage and silence checks below aren't about this video's real sound yet. The logo check is real: it looked at the actual picture.</p>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {# ---------------------------------------------------------------- player + timeline #}
+  {# The player is a direct child of the page so it can stay pinned on narrow screens while
+     the checks scroll underneath it. #}
+  <div class="player" data-player>
+    <video controls preload="metadata" playsinline src="{{ page.video_url }}"{% if page.poster_url %} poster="{{ page.poster_url }}"{% endif %} aria-label="The video: {{ job.video_name }}" data-video>
+      Your browser can't play this video here.
+    </video>
+  </div>
+
+  {% if page.timeline and page.state != "error" %}
+  {% set lanes = page.timeline.lanes %}
+  <section class="timeline-section" id="timeline" aria-label="Where each problem happens">
+    <div class="timeline" data-timeline data-duration="{{ page.timeline.duration }}">
+      <p class="timeline-help">Each row is one check. Red striped blocks show where a problem happens; tap or click one to play the video from just before it.</p>
+      <div class="timeline-grid">
+        {% for lane in lanes %}
+        <div class="lane-label lane-label-{{ 'passed' if lane.passed else 'failed' }}" style="grid-row: {{ loop.index }}">
+          {{ ui.state_icon("passed" if lane.passed else "failed") }}
+          <span>{{ lane.label }}</span>
+          <span class="visually-hidden">: {{ "passed" if lane.passed else "needs fixing" }}</span>
+        </div>
+        <div class="lane-track" style="grid-row: {{ loop.index }}">
+          {% for mark in lane.marks %}
+          <span class="mark mark-{{ mark.kind }}" style="left: {{ mark.left }}%"><span class="mark-label">{{ mark.label }}</span></span>
+          {% endfor %}
+          {% for block in lane.blocks %}
+          <button type="button" class="block" style="left: {{ block.left }}%; width: {{ block.width }}%" data-seek="{{ block.seek }}" aria-label="{{ block.label }}" title="{{ block.label }}"></button>
+          {% endfor %}
+          {% if lane.passed %}<span class="lane-ok">No problems found</span>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="axis" style="grid-row: {{ lanes | length + 1 }}" aria-hidden="true">
+          {% for tick in page.timeline.ticks %}
+          <span class="tick" style="left: {{ tick.left }}%">{{ tick.label }}</span>
+          {% endfor %}
+        </div>
+        <div class="playhead-layer" style="grid-row: 1 / {{ lanes | length + 2 }}" aria-hidden="true">
+          <span class="playhead" data-playhead></span>
+        </div>
+      </div>
+      {# On narrow screens the marker labels don't fit on the track, so they're listed here. #}
+      {% set marks = lanes | map(attribute="marks") | sum(start=[]) %}
+      {% if marks %}
+      <ul class="timeline-legend">
+        {% for mark in marks %}
+        <li><span class="legend-line legend-{{ mark.kind }}" aria-hidden="true"></span>{{ mark.label }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if page.state != "error" %}
+  {# ---------------------------------------------------------------- the four checks #}
+  <section class="checks-section" aria-labelledby="checks-heading">
+    <h2 id="checks-heading">The four checks</h2>
+    {% for view in page.checks %}
+    {% set check = view.check %}
+    <article class="check check-{{ check.status.value }}" aria-labelledby="check-{{ check.key }}">
+      <header class="check-header">
+        <span class="check-status">{{ ui.state_icon(check.status.value) }}<span>{{ "Passed" if check.passed else "Needs fixing" }}</span></span>
+        <h3 id="check-{{ check.key }}">{{ check.title }}</h3>
+        <span class="basis">{% if check.basis.value == "measured" %}{{ ui.icon_measured() }}{% else %}{{ ui.icon_ai() }}{% endif %}{{ check.basis_label }}</span>
+      </header>
+      <p class="check-explanation">{{ check.explanation }}</p>
+
+      {% if check.key == "logo" %}
+      <div class="logo-reference">
+        {% if page.logo_url %}
+        <img src="{{ page.logo_url }}" alt="The logo the reviewer looked for">
+        <p>The reviewer looked for this logo{% if job.logo_reference %} ({{ job.logo_reference }}){% endif %}.</p>
+        {% else %}
+        <p>No logo image was given, so the reviewer looked for the name “{{ agency_name }}” instead, described to it as {{ logo_description }}.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <p class="check-outcome"><strong>What we found:</strong> {{ check.outcome }}</p>
+
+      {% if view.findings %}
+      <ol class="findings">
+        {% for item in view.findings %}
+        {% set finding = item.finding %}
+        <li class="finding">
+          <div class="finding-when">
+            <button type="button" class="time-button" data-seek="{{ item.seek }}" aria-label="Play from {{ item.seek | mmss }}, just before {{ finding.time_label }}">{{ ui.icon_play() }}<span>{{ finding.time_label }}</span></button>
+            {% if item.thumbnail_url %}
+            <img class="finding-thumb" src="{{ item.thumbnail_url }}" alt="{{ item.thumbnail_alt }}" loading="lazy">
+            {% endif %}
+          </div>
+          <div class="finding-body">
+            <h4>{{ finding.headline }}</h4>
+            <p>{{ finding.detail }}</p>
+            {% if finding.said is not none or finding.shown is not none %}
+            <dl class="said-shown">
+              <div><dt>What was said</dt><dd>{{ finding.said or "Nothing was said here." }}</dd></div>
+              <div><dt>What was shown</dt><dd>{{ finding.shown or "The reviewer didn't describe it." }}</dd></div>
+            </dl>
+            {% endif %}
+            <p class="how-to-fix"><strong>How to fix:</strong> {{ finding.how_to_fix }}</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+
+  {# ---------------------------------------------------------------- notes + summary #}
+  <section class="card" aria-labelledby="notes-heading">
+    <h2 id="notes-heading">Notes for the editor</h2>
+    {% if job.report and job.report.feedback_for_editor.strip() %}
+    <p class="feedback">{{ job.report.feedback_for_editor }}</p>
+    <p class="hint">Written by the {{ "example's author" if job.is_example else "AI reviewer" }}.</p>
+    {% else %}
+    <p>The reviewer didn't leave any extra notes.</p>
+    {% endif %}
+  </section>
+
+  {% if page.summary_text %}
+  <section class="card" aria-labelledby="summary-heading">
+    <h2 id="summary-heading">Copy summary for the editor</h2>
+    <p>A short version of this report, with every fix and its time, ready to paste into a message.</p>
+    <label for="editor-summary" class="visually-hidden">Summary for the editor</label>
+    <textarea id="editor-summary" class="summary-text" readonly rows="{{ page.summary_rows }}" data-summary>{{ page.summary_text }}</textarea>
+    <p class="copy-row">
+      <button type="button" class="button button-primary" data-copy="#editor-summary">Copy summary</button>
+      <span class="copy-status" role="status" data-copy-status></span>
+    </p>
+  </section>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+
+  {# ---------------------------------------------------------------- technical details #}
+  {% set tech = page.technical %}
+  <details class="technical">
+    <summary>Technical details</summary>
+    <div class="technical-body">
+      <dl class="tech-list">
+        {% if tech.job_id %}<div><dt>job_id</dt><dd><code>{{ tech.job_id }}</code></dd></div>{% endif %}
+        <div><dt>status / stage</dt><dd><code>{{ tech.status }}</code> / <code>{{ tech.stage }}</code></dd></div>
+        <div><dt>model</dt><dd><code>{{ tech.model }}</code></dd></div>
+        <div><dt>model's own passed_qa</dt><dd><code>{{ tech.model_verdict }}</code></dd></div>
+        <div><dt>enforced passed_qa</dt><dd><code>{{ tech.enforced_verdict }}</code></dd></div>
+        <div><dt>frames sampled</dt><dd><code>{{ tech.frame_count }}</code></dd></div>
+        <div><dt>transcript</dt><dd><code>{% if job.is_example %}hand-written (example){% elif tech.transcript_simulated %}simulated (placeholder words){% else %}real{% endif %}</code></dd></div>
+        {% if tech.notification %}<div><dt>notifications</dt><dd><code>{{ tech.notification }}</code></dd></div>{% endif %}
+      </dl>
+
+      {% if tech.error %}
+      <h3>Raw error</h3>
+      <pre class="code">{{ tech.error }}</pre>
+      {% endif %}
+
+      <h3>Stage timings</h3>
+      <table class="tech-table">
+        <thead><tr><th scope="col">Stage</th><th scope="col">Started</th><th scope="col">Took</th></tr></thead>
+        <tbody>
+          {% for timing in tech.stage_timings %}
+          <tr><td>{{ timing.label }}</td><td>{{ timing.started }}</td><td>{{ timing.took }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h3>Transcript with times</h3>
+      {% if tech.transcript %}
+      <pre class="code">{{ tech.transcript | join("\n") }}</pre>
+      {% else %}
+      <p>No transcript (nothing spoken, no audio track, or not reached yet).</p>
+      {% endif %}
+
+      {% if tech.report_json %}
+      <h3>Report as enforced by the code (JSON)</h3>
+      <pre class="code">{{ tech.report_json }}</pre>
+      {% endif %}
+      {% if tech.model_report_json %}
+      <h3>Report as the model returned it (JSON)</h3>
+      <pre class="code">{{ tech.model_report_json }}</pre>
+      {% endif %}
+      {% if page.technical_json %}
+      <h3>Job record (JSON, without reports and frames)</h3>
+      <pre class="code">{{ page.technical_json }}</pre>
+      {% endif %}
+    </div>
+  </details>
+</div>
+{% endblock %}

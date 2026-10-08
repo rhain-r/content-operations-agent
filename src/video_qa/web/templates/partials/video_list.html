@@ -1,0 +1,36 @@
+{% import "macros.html" as ui %}
+<div class="video-list" data-active="{{ 'true' if has_active and not static_mode else 'false' }}">
+{% if rows %}
+  <ul class="videos">
+    {% for row in rows %}
+    <li>
+      <a class="video-row" href="{{ row.url }}">
+        {% if row.thumbnail_url %}
+        <img class="thumb" src="{{ row.thumbnail_url }}" alt="Opening frame of {{ row.video_name }}" loading="lazy">
+        {% else %}
+        <span class="thumb thumb-empty">{{ ui.icon_film("icon") }}</span>
+        {% endif %}
+        <span class="video-row-main">
+          <span class="video-name">{{ row.video_name }}{% if row.is_example %} <span class="tag">Example</span>{% endif %}</span>
+          <span class="video-meta">
+            {%- if row.editor_name %}{{ row.editor_name }} · {% endif -%}
+            {{ row.when }}{% if row.length %} · {{ row.length }} long{% endif -%}
+          </span>
+        </span>
+        {{ ui.status_badge(row.state, row.status_label) }}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <div class="empty-state">
+    {{ ui.icon_film("icon empty-icon") }}
+    <p class="empty-title">No videos checked yet</p>
+    {% if static_mode %}
+    <p>No videos have been published to this showcase yet.</p>
+    {% else %}
+    <p>Upload one above. It will appear here while it's being checked, and its result will stay here afterwards.</p>
+    {% endif %}
+  </div>
+{% endif %}
+</div>

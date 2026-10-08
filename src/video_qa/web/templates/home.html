@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block content %}
+<section class="intro" aria-labelledby="intro-heading">
+  <h1 id="intro-heading">Check a video before it's posted</h1>
+  {% if static_mode %}
+  <p class="lead">A tool that checks finished short videos before they're posted, and lists anything that needs fixing and exactly where it happens. Below are videos it has checked.</p>
+  {% else %}
+  <p class="lead">Upload a finished short video and you'll get a plain list of anything that needs fixing, and exactly where it happens.</p>
+  {% endif %}
+  <ol class="how-it-works">
+    <li><span class="how-num" aria-hidden="true">1</span><span>Upload a finished video</span></li>
+    <li><span class="how-num" aria-hidden="true">2</span><span>It's checked against four rules</span></li>
+    <li><span class="how-num" aria-hidden="true">3</span><span>You get a list of what to fix, and where</span></li>
+  </ol>
+</section>
+
+{% if not static_mode and not reviewer_connected %}
+<div class="notice notice-warning" role="status">
+  {{ ui.icon_info("icon notice-icon") }}
+  <div>
+    <p class="notice-title">{{ reviewer_not_connected }}</p>
+    <p>To connect it, open the file called <code>.env</code> in the app's folder, add a line that says <code>ANTHROPIC_API_KEY=</code> followed by your Anthropic API key, and restart the app. Videos that were already checked can still be opened below.</p>
+  </div>
+</div>
+{% endif %}
+
+{% if static_mode %}
+<p class="showcase-note">{{ ui.icon_info() }}<span>This is a read-only showcase of videos we checked. Checking a new video runs on our own machine{% if repo_url %}; to run it yourself, <a href="{{ repo_url }}">see the code on GitHub</a>{% endif %}.</span></p>
+{% else %}
+<section class="card upload-card" aria-labelledby="upload-heading">
+  <h2 id="upload-heading">Check a video</h2>
+  <form id="upload-form" data-action="/v1/qa-jobs" data-max-bytes="{{ max_upload_bytes }}" data-max-size="{{ max_size }}" novalidate>
+    <fieldset {% if not reviewer_connected %}disabled{% endif %}>
+      <legend class="visually-hidden">Video to check</legend>
+      <div class="dropzone" data-dropzone>
+        {{ ui.icon_upload("icon dropzone-icon") }}
+        <p class="dropzone-title">Drag and drop a video here</p>
+        <p class="dropzone-or">or</p>
+        <button type="button" class="button button-secondary" data-choose>Choose a video file</button>
+        <input type="file" id="video-file" name="file" accept="video/*,.mp4,.mov,.m4v,.webm" class="visually-hidden" tabindex="-1" aria-hidden="true">
+        <p class="dropzone-file" data-file-name aria-live="polite" hidden></p>
+      </div>
+      <p class="hint">Videos up to {{ max_length }} long and {{ max_size }} in size. Most video files work; .mp4 is best.</p>
+
+      <div class="field">
+        <label for="editor-name">Editor's name <span class="optional">(optional)</span></label>
+        <input id="editor-name" name="editor_name" type="text" maxlength="100" autocomplete="off">
+      </div>
+      {% if slack_required %}
+      <div class="field">
+        <label for="editor-slack">Editor's Slack member ID</label>
+        <input id="editor-slack" name="editor_slack_id" type="text" autocomplete="off" placeholder="For example U0123ABCD">
+        <p class="hint">They'll get a Slack message if the video needs fixes.</p>
+      </div>
+      {% endif %}
+
+      <div class="upload-error" role="alert" data-upload-error hidden></div>
+      <div class="upload-progress" data-upload-progress hidden>
+        <progress max="100" value="0" aria-label="Upload progress"></progress>
+        <span data-upload-status aria-live="polite">Uploading…</span>
+      </div>
+      <button type="submit" class="button button-primary" data-submit>Check this video</button>
+    </fieldset>
+  </form>
+</section>
+{% endif %}
+
+<section class="rules-section" aria-labelledby="rules-heading">
+  <h2 id="rules-heading">What we check</h2>
+  <ul class="rules">
+    {% for check in checks %}
+    <li class="rule">
+      <span class="rule-num" aria-hidden="true">{{ loop.index }}</span>
+      <div>
+        <h3>{{ check.title }}</h3>
+        <p>{{ check.explanation }}</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="videos-section" aria-labelledby="videos-heading">
+  <h2 id="videos-heading">Checked videos</h2>
+  <div data-video-list{% if not static_mode %} data-refresh-url="/partials/video-list"{% endif %}>
+    {% include "partials/video_list.html" %}
+  </div>
+</section>
+{% endblock %}
